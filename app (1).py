@@ -1,3 +1,4 @@
+%%writefile app.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -143,7 +144,7 @@ fig = px.bar(
         color="Average_Lead_Time"
     )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 st.header("Geographic Bottleneck Analysis")
 
@@ -171,7 +172,7 @@ fig = px.scatter(
         color_continuous_scale="Reds"
     )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 st.header("Ship Mode Comparison")
 
@@ -197,7 +198,7 @@ fig = px.bar(
         title="Average Lead Time by Ship Mode"
     )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 st.header("Route Drill Down")
 
