@@ -94,6 +94,9 @@ filtered_df = df[
         (df["State_Province"].isin(selected_states)) &
         (df["Ship_Mode"].isin(selected_ship_modes))
 ]
+if filtered_df.empty:
+    st.warning("No data found for the selected filters.")
+    st.stop()
 
 if len(date_range) == 2:
         start_date = pd.to_datetime(date_range[0])
