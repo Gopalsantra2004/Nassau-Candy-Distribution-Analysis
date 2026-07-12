@@ -10,6 +10,13 @@ st.set_page_config(
 st.title("Factory-to-Customer Shipping Route Efficiency Analysis")
 st.subheader("Nassau Candy Distributor")
 
+# ── Initialize session state ──────────────────────────────────────────────────
+st.session_state.setdefault("filtered_df", None)
+st.session_state.setdefault("route_perf", None)
+st.session_state.setdefault("state_perf", None)
+st.session_state.setdefault("ship_mode_perf", None)
+
+# ── Load data ─────────────────────────────────────────────────────────────────
 try:
     df = pd.read_csv("Nassau Candy Distributor.csv")
 except FileNotFoundError:
@@ -71,6 +78,7 @@ if len(unmapped) > 0:
 df["Factory_to_State_Route"] = df["Factory"] + " -> " + df["State_Province"]
 df["Factory_to_Region_Route"] = df["Factory"] + " -> " + df["Region"]
 
+# ── Sidebar filters ───────────────────────────────────────────────────────────
 st.sidebar.header("Filters")
 
 min_date = df["Order_Date"].min()
@@ -114,30 +122,73 @@ threshold = st.sidebar.slider(
 
 df["Delayed"] = df["Shipping_Lead_Time"] > threshold
 
-# Guard against empty multiselects
-if not selected_regions or not selected_states or not selected_ship_modes:
-    st.warning("Please select at least one option in each filter.")
+# ── Apply filters button ──────────────────────────────────────────────────────
+if st.sidebar.button("Apply Filters"):
+    if not selected_regions or not selected_states or not selected_ship_modes:
+        st.warning("Please select at least one option in each filter.")
+    else:
+        filtered_df = df[
+            (df["Region"].isin(selected_regions)) &
+            (df["State_Province"].isin(selected_states)) &
+            (df["Ship_Mode"].isin(selected_ship_modes))
+        ]
+
+        if len(date_range) == 2:
+            start_date = pd.to_datetime(date_range[0])
+            end_date = pd.to_datetime(date_range[1])
+            filtered_df = filtered_df[
+                (filtered_df["Order_Date"] >= start_date) &
+                (filtered_df["Order_Date"] <= end_date)
+            ]
+
+        if filtered_df.empty:
+            st.warning("No shipments match the selected filters. Adjust the filters in the sidebar.")
+        else:
+            # Persist results in session state so they survive reruns
+            st.session_state.filtered_df = filtered_df
+
+            st.session_state.route_perf = (
+                filtered_df
+                .dropna(subset=["Factory_to_State_Route"])
+                .groupby("Factory_to_State_Route", as_index=False)
+                .agg(
+                    Total_Shipments=("Order_ID", "count"),
+                    Average_Lead_Time=("Shipping_Lead_Time", "mean"),
+                    Delay_Frequency=("Delayed", "mean")
+                )
+            )
+
+            st.session_state.state_perf = (
+                filtered_df
+                .groupby("State_Province", as_index=False)
+                .agg(
+                    Total_Shipments=("Order_ID", "count"),
+                    Average_Lead_Time=("Shipping_Lead_Time", "mean"),
+                    Delay_Frequency=("Delayed", "mean")
+                )
+            )
+
+            st.session_state.ship_mode_perf = (
+                filtered_df
+                .groupby("Ship_Mode", as_index=False)
+                .agg(
+                    Total_Shipments=("Order_ID", "count"),
+                    Average_Lead_Time=("Shipping_Lead_Time", "mean"),
+                    Delay_Frequency=("Delayed", "mean")
+                )
+            )
+
+# ── Display results from session state ───────────────────────────────────────
+if st.session_state.filtered_df is None:
+    st.info("Use the sidebar filters and click **Apply Filters** to load the dashboard.")
     st.stop()
 
-filtered_df = df[
-    (df["Region"].isin(selected_regions)) &
-    (df["State_Province"].isin(selected_states)) &
-    (df["Ship_Mode"].isin(selected_ship_modes))
-]
+filtered_df = st.session_state.filtered_df
+route_perf = st.session_state.route_perf
+state_perf = st.session_state.state_perf
+ship_mode_perf = st.session_state.ship_mode_perf
 
-if len(date_range) == 2:
-    start_date = pd.to_datetime(date_range[0])
-    end_date = pd.to_datetime(date_range[1])
-    filtered_df = filtered_df[
-        (filtered_df["Order_Date"] >= start_date) &
-        (filtered_df["Order_Date"] <= end_date)
-    ]
-
-if filtered_df.empty:
-    st.warning("No shipments match the selected filters. Adjust the filters in the sidebar.")
-    st.stop()
-
-# KPI Metrics
+# ── KPI Metrics ───────────────────────────────────────────────────────────────
 col1, col2, col3, col4 = st.columns(4)
 
 col1.metric("Total Shipments", len(filtered_df))
@@ -149,22 +200,11 @@ col4.metric("Total Sales", round(total_sales, 2))
 
 st.divider()
 
-# Route Efficiency Overview
+# ── Route Efficiency Overview ─────────────────────────────────────────────────
 st.header("Route Efficiency Overview")
 
-route_perf = (
-    filtered_df
-    .dropna(subset=["Factory_to_State_Route"])
-    .groupby("Factory_to_State_Route", as_index=False)
-    .agg(
-        Total_Shipments=("Order_ID", "count"),
-        Average_Lead_Time=("Shipping_Lead_Time", "mean"),
-        Delay_Frequency=("Delayed", "mean")
-    )
-)
-
 if route_perf.empty:
-    st.info("No routes available for the current filters (products may be missing a factory mapping).")
+    st.info("No routes available for the current filters.")
 else:
     route_perf["Average_Lead_Time"] = route_perf["Average_Lead_Time"].round(2)
     route_perf["Delay_Frequency_%"] = (route_perf["Delay_Frequency"] * 100).round(2)
@@ -183,18 +223,8 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# Geographic Bottleneck Analysis
+# ── Geographic Bottleneck Analysis ────────────────────────────────────────────
 st.header("Geographic Bottleneck Analysis")
-
-state_perf = (
-    filtered_df
-    .groupby("State_Province", as_index=False)
-    .agg(
-        Total_Shipments=("Order_ID", "count"),
-        Average_Lead_Time=("Shipping_Lead_Time", "mean"),
-        Delay_Frequency=("Delayed", "mean")
-    )
-)
 
 state_perf["Average_Lead_Time"] = state_perf["Average_Lead_Time"].round(2)
 state_perf["Delay_Frequency_%"] = (state_perf["Delay_Frequency"] * 100).round(2)
@@ -211,18 +241,8 @@ fig = px.scatter(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# Ship Mode Comparison
+# ── Ship Mode Comparison ──────────────────────────────────────────────────────
 st.header("Ship Mode Comparison")
-
-ship_mode_perf = (
-    filtered_df
-    .groupby("Ship_Mode", as_index=False)
-    .agg(
-        Total_Shipments=("Order_ID", "count"),
-        Average_Lead_Time=("Shipping_Lead_Time", "mean"),
-        Delay_Frequency=("Delayed", "mean")
-    )
-)
 
 ship_mode_perf["Average_Lead_Time"] = ship_mode_perf["Average_Lead_Time"].round(2)
 ship_mode_perf["Delay_Frequency_%"] = (ship_mode_perf["Delay_Frequency"] * 100).round(2)
@@ -237,7 +257,7 @@ fig = px.bar(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# Route Drill Down
+# ── Route Drill Down ──────────────────────────────────────────────────────────
 st.header("Route Drill Down")
 
 route_options = sorted(filtered_df["Factory_to_State_Route"].dropna().unique())
@@ -255,7 +275,6 @@ else:
         "Product_Name", "Sales", "Gross_Profit"
     ]
 
-    # Only keep columns that actually exist in the dataframe
     available_cols = [c for c in drill_cols if c in route_drill.columns]
 
     st.dataframe(
