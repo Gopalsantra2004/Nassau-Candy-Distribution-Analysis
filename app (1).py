@@ -23,6 +23,13 @@ df.columns = (
     .str.replace("/", "_")
 )
 
+# Check required columns exist
+required_cols = ["Order_Date", "Ship_Date", "Region", "State_Province", "Ship_Mode", "Sales"]
+missing = [c for c in required_cols if c not in df.columns]
+if missing:
+    st.error(f"Missing required columns: {missing}")
+    st.stop()
+
 df["Order_Date"] = pd.to_datetime(df["Order_Date"], dayfirst=True, errors="coerce")
 df["Ship_Date"] = pd.to_datetime(df["Ship_Date"], dayfirst=True, errors="coerce")
 df["Shipping_Lead_Time"] = (df["Ship_Date"] - df["Order_Date"]).dt.days
@@ -54,7 +61,6 @@ product_factory_map = {
 
 df["Factory"] = df["Product_Name"].map(product_factory_map)
 
-# Flag products that weren't found in the map instead of silently dropping them later
 unmapped = df.loc[df["Factory"].isna(), "Product_Name"].dropna().unique()
 if len(unmapped) > 0:
     st.sidebar.warning(
@@ -97,7 +103,6 @@ lead_time_min = int(df["Shipping_Lead_Time"].min())
 lead_time_max = int(df["Shipping_Lead_Time"].max())
 
 if lead_time_min == lead_time_max:
-    # st.slider requires min < max, so widen the range by 1 to avoid a crash
     lead_time_max += 1
 
 threshold = st.sidebar.slider(
@@ -108,6 +113,11 @@ threshold = st.sidebar.slider(
 )
 
 df["Delayed"] = df["Shipping_Lead_Time"] > threshold
+
+# Guard against empty multiselects
+if not selected_regions or not selected_states or not selected_ship_modes:
+    st.warning("Please select at least one option in each filter.")
+    st.stop()
 
 filtered_df = df[
     (df["Region"].isin(selected_regions)) &
@@ -127,15 +137,19 @@ if filtered_df.empty:
     st.warning("No shipments match the selected filters. Adjust the filters in the sidebar.")
     st.stop()
 
+# KPI Metrics
 col1, col2, col3, col4 = st.columns(4)
 
 col1.metric("Total Shipments", len(filtered_df))
 col2.metric("Average Lead Time", round(filtered_df["Shipping_Lead_Time"].mean(), 2))
 col3.metric("Delay Frequency %", round(filtered_df["Delayed"].mean() * 100, 2))
-col4.metric("Total Sales", round(filtered_df["Sales"].sum(), 2))
+
+total_sales = filtered_df["Sales"].sum() if "Sales" in filtered_df.columns else 0
+col4.metric("Total Sales", round(total_sales, 2))
 
 st.divider()
 
+# Route Efficiency Overview
 st.header("Route Efficiency Overview")
 
 route_perf = (
@@ -167,9 +181,9 @@ else:
         title="Top 10 Most Efficient Routes",
         color="Average_Lead_Time"
     )
-
     st.plotly_chart(fig, use_container_width=True)
 
+# Geographic Bottleneck Analysis
 st.header("Geographic Bottleneck Analysis")
 
 state_perf = (
@@ -195,9 +209,9 @@ fig = px.scatter(
     title="State-Level Bottleneck View",
     color_continuous_scale="Reds"
 )
-
 st.plotly_chart(fig, use_container_width=True)
 
+# Ship Mode Comparison
 st.header("Ship Mode Comparison")
 
 ship_mode_perf = (
@@ -221,9 +235,9 @@ fig = px.bar(
     text="Average_Lead_Time",
     title="Average Lead Time by Ship Mode"
 )
-
 st.plotly_chart(fig, use_container_width=True)
 
+# Route Drill Down
 st.header("Route Drill Down")
 
 route_options = sorted(filtered_df["Factory_to_State_Route"].dropna().unique())
@@ -235,20 +249,15 @@ else:
 
     route_drill = filtered_df[filtered_df["Factory_to_State_Route"] == selected_route]
 
+    drill_cols = [
+        "Order_ID", "Order_Date", "Ship_Date", "Shipping_Lead_Time",
+        "Ship_Mode", "Customer_ID", "City", "State_Province",
+        "Product_Name", "Sales", "Gross_Profit"
+    ]
+
+    # Only keep columns that actually exist in the dataframe
+    available_cols = [c for c in drill_cols if c in route_drill.columns]
+
     st.dataframe(
-        route_drill[
-            [
-                "Order_ID",
-                "Order_Date",
-                "Ship_Date",
-                "Shipping_Lead_Time",
-                "Ship_Mode",
-                "Customer_ID",
-                "City",
-                "State_Province",
-                "Product_Name",
-                "Sales",
-                "Gross_Profit"
-            ]
-        ].sort_values("Shipping_Lead_Time", ascending=False)
+        route_drill[available_cols].sort_values("Shipping_Lead_Time", ascending=False)
     )
