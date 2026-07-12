@@ -1,4 +1,3 @@
-%%writefile app.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -22,14 +21,14 @@ df.columns = (
         .str.strip()
         .str.replace(" ", "_")
         .str.replace("/", "_")
-        )
-
+    )
 df["Order_Date"] = pd.to_datetime(df["Order_Date"], dayfirst=True, errors="coerce")
 df["Ship_Date"] = pd.to_datetime(df["Ship_Date"], dayfirst=True, errors="coerce")
 df["Shipping_Lead_Time"] = (df["Ship_Date"] - df["Order_Date"]).dt.days
 
 df = df.dropna(subset=["Order_Date", "Ship_Date"])
 df = df[df["Shipping_Lead_Time"] >= 0]
+
 product_factory_map = {
         "Wonka Bar - Nutty Crunch Surprise": "Lot's O' Nuts",
         "Wonka Bar - Fudge Mallows": "Lot's O' Nuts",
@@ -61,32 +60,32 @@ max_date = df["Order_Date"].max()
 date_range = st.sidebar.date_input(
         "Order Date Range",
         [min_date, max_date]
-)
+    )
 
 selected_regions = st.sidebar.multiselect(
         "Select Region",
         sorted(df["Region"].dropna().unique()),
         default=sorted(df["Region"].dropna().unique())
-)
+    )
 
 selected_states = st.sidebar.multiselect(
         "Select State",
         sorted(df["State_Province"].dropna().unique()),
         default=sorted(df["State_Province"].dropna().unique())
-)
+    )
 
 selected_ship_modes = st.sidebar.multiselect(
         "Select Ship Mode",
         sorted(df["Ship_Mode"].dropna().unique()),
         default=sorted(df["Ship_Mode"].dropna().unique())
-)
+    )
 
 threshold = st.sidebar.slider(
         "Delay Threshold Days",
         int(df["Shipping_Lead_Time"].min()),
         int(df["Shipping_Lead_Time"].max()),
         int(df["Shipping_Lead_Time"].quantile(0.75))
-)
+    )
 
 df["Delayed"] = df["Shipping_Lead_Time"] > threshold
 
@@ -94,10 +93,7 @@ filtered_df = df[
         (df["Region"].isin(selected_regions)) &
         (df["State_Province"].isin(selected_states)) &
         (df["Ship_Mode"].isin(selected_ship_modes))
-]
-if filtered_df.empty:
-    st.warning("No data found for the selected filters.")
-    st.stop()
+    ]
 
 if len(date_range) == 2:
         start_date = pd.to_datetime(date_range[0])
@@ -144,7 +140,7 @@ fig = px.bar(
         color="Average_Lead_Time"
     )
 
-st.plotly_chart(fig, width="stretch")
+st.plotly_chart(fig, use_container_width=True)
 
 st.header("Geographic Bottleneck Analysis")
 
@@ -172,7 +168,7 @@ fig = px.scatter(
         color_continuous_scale="Reds"
     )
 
-st.plotly_chart(fig, width="stretch")
+st.plotly_chart(fig, use_container_width=True)
 
 st.header("Ship Mode Comparison")
 
@@ -186,6 +182,7 @@ ship_mode_perf = (
         )
     )
 
+    
 ship_mode_perf["Average_Lead_Time"] = ship_mode_perf["Average_Lead_Time"].round(2)
 ship_mode_perf["Delay_Frequency_%"] = (ship_mode_perf["Delay_Frequency"] * 100).round(2)
 
@@ -198,33 +195,33 @@ fig = px.bar(
         title="Average Lead Time by Ship Mode"
     )
 
-st.plotly_chart(fig, width="stretch")
+st.plotly_chart(fig, use_container_width=True)
 
 st.header("Route Drill Down")
 
 selected_route = st.selectbox(
-    "Select Route",
-    sorted(filtered_df["Factory_to_State_Route"].dropna().unique())
-)
-
+        "Select Route",
+sorted(filtered_df["Factory_to_State_Route"].dropna().unique())
+    )
 route_drill = filtered_df[
-    filtered_df["Factory_to_State_Route"] == selected_route
-]
+        filtered_df["Factory_to_State_Route"] == selected_route
+    ]
 
 st.dataframe(
-    route_drill[
-        [
-            "Order_ID",
-            "Order_Date",
-            "Ship_Date",
-            "Shipping_Lead_Time",
-            "Ship_Mode",
-            "Customer_ID",
-            "City",
-            "State_Province",
-            "Product_Name",
-            "Sales",
-            "Gross_Profit"
-        ]
-    ].sort_values("Shipping_Lead_Time", ascending=False)
-)
+        route_drill[
+            [
+                "Order_ID",
+                "Order_Date",
+                "Ship_Date",
+                "Shipping_Lead_Time",
+                "Ship_Mode",
+                "Customer_ID",
+                "City",
+                "State_Province",
+                "Product_Name",
+                "Sales",
+                "Gross_Profit"
+            ]
+        ].sort_values("Shipping_Lead_Time", ascending=False)
+    )
+
